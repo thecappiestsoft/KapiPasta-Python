@@ -253,14 +253,14 @@ except ValueError:
     print(1 / 0)
 ___ ZeroDivisionError:
     print("Nie wolno!")''', ans=[['except']], expect='Nie wolno!', why='Błędy łapiemy w bloku except.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''try:
+   dict(t='quiz', l=1, q='Co wypisze program?', code='''try:
     t = [1, 2]
     print(t[5])
 except ValueError:
     print("A")
 except IndexError:
     print("B")''', opts=['B', 'A', 'A\nB', 'Błąd'], a=0, out=True, why='t[5] zgłasza IndexError – łapie go drugi except.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''try:
+   dict(t='quiz', l=3, q='Co wypisze program?', code='''try:
     x = 5
 except:
     print("A")
@@ -314,7 +314,7 @@ print("Suma punktów:", suma)''', lvl=2,
 with open("a.txt", "___") as f:
     f.write("2\\n")
 print(open("a.txt").read().split())''', ans=[['a']], expect="['1', '2']", why='Tryb "a" (append) dopisuje na końcu.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''with open("t.txt", "w") as f:
+   dict(t='quiz', l=1, q='Co wypisze program?', code='''with open("t.txt", "w") as f:
     f.write("ala\\nma\\nkota\\n")
 with open("t.txt") as f:
     print(len(f.readlines()))''', opts=['3', '1', '11', '12'], a=0, out=True, why='Plik ma 3 linie.'),
@@ -515,11 +515,11 @@ print([x for x in range(2, 30) if pierwsza(x)])''',
    dict(t='quiz', l=1, q='Która liczba jest pierwsza?', opts=['13', '15', '21', '1'], a=0, why='13 dzieli się tylko przez 1 i 13. Liczba 1 nie jest pierwsza.'),
    dict(t='quiz', l=1, q='Co wypisze program?', code='''s = "level"
 print(s == s[::-1])''', opts=['True', 'False', 'level', 'leveL'], a=0, out=True, why='"level" od tyłu to nadal "level".'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''a, b = 20, 8
+   dict(t='quiz', l=1, q='Co wypisze program?', code='''a, b = 20, 8
 while b != 0:
     a, b = b, a % b
 print(a)''', opts=['4', '8', '2', '160'], a=0, out=True, why='(20, 8) → (8, 4) → (4, 0). NWD = 4.'),
-   dict(t='fill', l=2, q='Uzupełnij krok algorytmu Euklidesa', code='''a, b = 12, 18
+   dict(t='fill', l=1, q='Uzupełnij krok algorytmu Euklidesa', code='''a, b = 12, 18
 while b != 0:
     a, b = b, ___
 print(a)''', ans=[['a%b', 'a % b']], expect='6', why='Nowe b to reszta z dzielenia a przez b.'),
@@ -560,9 +560,9 @@ print("Kapi ma " + wiek + " lata")''',
 print(imei)''', opts=['NameError', 'TypeError', 'SyntaxError', 'KeyError'], a=0, err=True, why='Literówka: imei nie istnieje.'),
    dict(t='quiz', l=1, q='Jaki błąd zgłosi kod?', code='''t = [1, 2, 3]
 print(t[3])''', opts=['IndexError', 'KeyError', 'ValueError', 'TypeError'], a=0, err=True, why='Lista ma indeksy 0–2.'),
-   dict(t='quiz', l=2, q='Jaki błąd zgłosi kod?', code='''d = {"a": 1}
+   dict(t='quiz', l=1, q='Jaki błąd zgłosi kod?', code='''d = {"a": 1}
 print(d["b"])''', opts=['KeyError', 'IndexError', 'NameError', 'ValueError'], a=0, err=True, why='Brak klucza w słowniku to KeyError.'),
-   dict(t='quiz', l=2, q='Jaki błąd zgłosi kod?', code='''def f():
+   dict(t='quiz', l=3, q='Jaki błąd zgłosi kod?', code='''def f():
 return 5''', opts=['IndentationError', 'SyntaxError: brak dwukropka', 'NameError', 'TypeError'], a=0, err=True, why='Ciało funkcji musi być wcięte.'),
    dict(t='bug', l=1, q='Przeczytaj komunikat błędu i kliknij winną linię.', code='''a = 5
 b = 0

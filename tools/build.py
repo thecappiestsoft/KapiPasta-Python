@@ -20,8 +20,32 @@ def load(path):
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
 
 PL = []
+EXTRA_PL = {}
 for f in sorted(glob.glob(os.path.join(ROOT, 'content', 'pl', '*.py'))):
-    PL += load(f).CH
+    m = load(f)
+    PL += getattr(m, 'CH', [])
+    for k, v in getattr(m, 'EXTRA', {}).items():
+        EXTRA_PL.setdefault(k, []).extend(v)
+def resolve(x, i):
+    """Bilingual fields: ('polski', 'English') -> pick language i (0 = PL, 1 = EN)."""
+    if isinstance(x, tuple) and len(x) == 2 and all(isinstance(v, str) for v in x):
+        return x[i]
+    if isinstance(x, dict):
+        return {k: resolve(v, i) for k, v in x.items()}
+    if isinstance(x, list):
+        return [resolve(v, i) for v in x]
+    return x
+
+BOTH = {}
+for f in sorted(glob.glob(os.path.join(ROOT, 'content', 'both', '*.py'))):
+    for k, v in getattr(load(f), 'EXTRA2', {}).items():
+        BOTH.setdefault(k, []).extend(v)
+for k, v in BOTH.items():
+    EXTRA_PL.setdefault(k, []).extend(resolve(copy.deepcopy(v), 0))
+_ids = {L['id']: L for ch in PL for L in ch['lessons']}
+for k, v in EXTRA_PL.items():
+    assert k in _ids, ('EXTRA: unknown lesson id', k)
+    _ids[k]['tasks'].extend(v)
 problems = []
 
 def norm(s):
@@ -53,6 +77,11 @@ def P(where, msg):
 
 def verify(CH, lang):
     global ntask
+    for ch in CH:
+        for L in ch['lessons']:
+            c = [sum(1 for t in L['tasks'] if t['l'] == k) for k in (1, 2, 3)]
+            if c != [6, 6, 6]:
+                P(L['id'], f'levels must be 6/6/6 (got {c[0]}/{c[1]}/{c[2]})')
     for ch in CH:
         for L in ch['lessons']:
             for i, ex in enumerate(L['ex']):
@@ -108,6 +137,9 @@ def verify(CH, lang):
                             t['err'] = r['err']; t['errline'] = r['line']
                             if not t.get('cause') and r['line'] != t['line'] + 1: P(w, f"error line {r['line']} vs {t['line'] + 1}")
                 elif t['t'] == 'code':
+                    for tc in t['tests']:
+                        if tc.get('o') == '@':   # expected output computed from the model solution
+                            tc['o'] = norm(run(t['sol'], tc['i'], t.get('setup', ''))['out'])
                     tests = t['tests'] or [dict(i='', o=None)]
                     for tc in tests:
                         r = run(t['sol'], tc['i'], t.get('setup', ''), t.get('check', ''))
@@ -144,13 +176,37 @@ ntask = 0
 CHS = {'pl': PL}
 EN = {'chapters': {}, 'lessons': {}}
 for f in sorted(glob.glob(os.path.join(ROOT, 'content', 'en', '*.py'))):
-    m = load(f); EN['chapters'].update(m.CHAPTERS); EN['lessons'].update(m.LESSONS)
-if EN['lessons']:
+    m = load(f)
+    EN['chapters'].update(getattr(m, 'CHAPTERS', {})); EN['lessons'].update(getattr(m, 'LESSONS', {}))
+    for k, v in getattr(m, 'EXTRA', {}).items():
+        EN.setdefault('extra', {}).setdefault(k, []).extend(v)
+for k, v in BOTH.items():
+    EN.setdefault('extra', {}).setdefault(k, []).extend(resolve(copy.deepcopy(v), 1))
+for k, v in EN.get('extra', {}).items():
+    EN['lessons'][k]['tasks'] = EN['lessons'][k]['tasks'] + v
+if EN['lessons'] and not os.environ.get('SKIP_EN'):
     CHS['en'] = merge(PLc, EN)
 for lang, CH in CHS.items():
     ntask = 0
     CUR[0] = lang; verify(CH, lang)
     print(lang, 'chapters', len(CH), 'lessons', sum(len(c['lessons']) for c in CH), 'tasks', ntask)
+import re
+PLW = re.compile(r'[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]|\b(Błąd|Bład|nic|brak|owoc\w*|arbuz\w*|imie|wiek|liczb\w*|lubi|ma |jest|zadanie|pętl\w*|Wypisz|Wczytaj|tekst\w*|zostaje|suma|ile|lista|slowa|wynik|klasa|Linia|Popraw|pierwsza|szukaj|plecak|kolejka|mandaryn\w*|zwierze|nogi|cena|punkty|silnia|odliczaj|potega|nwd)\b')
+def scan(o, path):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k in ('id', 'err', 'got', 'out', 'etype', 's', 'hl'): continue
+            scan(v, path + '.' + k)
+    elif isinstance(o, list):
+        for i, v in enumerate(o): scan(v, path + f'[{i}]')
+    elif isinstance(o, str):
+        m = PLW.search(o)
+        if m: print('PL?', path, '|', m.group(0), '|', o[:70].replace('\n', '⏎'))
+if 'en' in CHS:  # warn about leftover Polish in the English version
+    for ch in CHS['en']:
+        for L in ch['lessons']:
+            scan({k: v for k, v in L.items() if k != 'id'}, L['id'])
+
 print('\n'.join(problems) or 'OK - no problems')
 if problems:
     sys.exit(1)

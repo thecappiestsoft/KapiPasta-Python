@@ -74,7 +74,7 @@ print("Mam {x} kaczek")''',
         why='Bez litery f nawiasy klamrowe są zwykłymi znakami – nic nie jest podmieniane.'),
    dict(t='fill', l=1, q='Uzupełnij, żeby wypisało: Kapi ma 5 lat', code='''wiek = 5
 print(___"Kapi ma {wiek} lat")''', ans=[['f']], why='Litera f przed cudzysłowem włącza podmianę {}.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''a = 2
+   dict(t='quiz', l=1, q='Co wypisze program?', code='''a = 2
 b = 3
 print(f"{a} * {b} = {a * b}")''', opts=['2 * 3 = 6', 'a * b = 6', '2 * 3 = a * b', '6 = 6'], a=0, out=True,
         why='W {} można wpisać całe wyrażenie – Python je obliczy.'),
@@ -134,7 +134,7 @@ print(kapi_lubi_wode)''', ans=[['True']], why='Wartości logiczne w Pythonie pis
    dict(t='bug', l=1, q='Python zgłasza błąd. Która linia jest winna?', code='''owoce = 5
 print(Owoce)''', line=1, fix='print(owoce)',
         why='Python rozróżnia wielkość liter. Zmienna Owoce nie istnieje – stąd NameError.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''a = 1
+   dict(t='quiz', l=3, q='Co wypisze program?', code='''a = 1
 b = 2
 a, b = b, a
 print(a, b)''', opts=['2 1', '1 2', '2 2', '1 1'], a=0, out=True, why='a, b = b, a zamienia wartości miejscami w jednym kroku.'),
@@ -170,7 +170,7 @@ print(x + 1)''', ans=[['int', 'float']], run=False, why='int() zamienia tekst na
 cena = int(t)
 print(cena * 2)''', inp='2.5', line=1, fix='cena = float(t)',
         why='int("2.5") nie zadziała – tekst z kropką zamieniamy przez float().'),
-   dict(t='quiz', l=2, q='Co wypisze <code>print(str(3) * 3)</code>?', code='print(str(3) * 3)', opts=['333', '9', '3 3 3', 'Błąd'], a=0, out=True,
+   dict(t='quiz', l=1, q='Co wypisze <code>print(str(3) * 3)</code>?', code='print(str(3) * 3)', opts=['333', '9', '3 3 3', 'Błąd'], a=0, out=True,
         why='str(3) to "3", a tekst razy liczba to powtórzenie: "333".'),
    dict(t='code', l=1, q='Wczytaj imię i wypisz <code>Witaj, IMIĘ!</code><br>Np. dla <code>Ola</code> → <code>Witaj, Ola!</code>',
         start='imie = input()\n', tests=[dict(i='Ola', o='Witaj, Ola!'), dict(i='Kapi', o='Witaj, Kapi!')],
@@ -209,7 +209,7 @@ print(n % 10, n // 10)''', lvl=2,
    dict(t='quiz', l=1, q='Ile to <code>3 ** 2</code>?', code='print(3 ** 2)', opts=['9', '6', '5', '32'], a=0, out=True, why='3 do potęgi 2 to 3 · 3 = 9.'),
    dict(t='quiz', l=1, q='Co wypisze <code>print(8 / 2)</code>?', code='print(8 / 2)', opts=['4.0', '4', '4.00', '8/2'], a=0, out=True,
         why='Zwykłe dzielenie / zawsze daje liczbę float.'),
-   dict(t='fill', l=2, q='Uzupełnij operator, aby sprawdzić resztę z dzielenia przez 2', code='''n = 9
+   dict(t='fill', l=1, q='Uzupełnij operator, aby sprawdzić resztę z dzielenia przez 2', code='''n = 9
 print(n ___ 2)''', ans=[['%']], expect='1', why='% daje resztę. 9 % 2 = 1, więc 9 jest nieparzyste.'),
    dict(t='quiz', l=2, q='Co wypisze program?', code='''x = 10
 x += 5
@@ -349,7 +349,7 @@ else:
    dict(t='code', l=1, q='Wczytaj liczbę. Wypisz <code>parzysta</code> lub <code>nieparzysta</code>.',
         start='n = int(input())\n', tests=[dict(i='4', o='parzysta'), dict(i='7', o='nieparzysta'), dict(i='0', o='parzysta')],
         sol='n = int(input())\nif n % 2 == 0:\n    print("parzysta")\nelse:\n    print("nieparzysta")', hint='Sprawdź n % 2 == 0.'),
-   dict(t='code', l=2, q='Wczytaj temperaturę wody. Wypisz: <code>lód</code> (≤ 0), <code>zimna</code> (1–15), <code>idealna</code> (16–30), <code>gorąca</code> (> 30).',
+   dict(t='code', l=3, q='Wczytaj temperaturę wody. Wypisz: <code>lód</code> (≤ 0), <code>zimna</code> (1–15), <code>idealna</code> (16–30), <code>gorąca</code> (> 30).',
         start='t = int(input())\n', tests=[dict(i='-3', o='lód'), dict(i='0', o='lód'), dict(i='10', o='zimna'), dict(i='16', o='idealna'), dict(i='30', o='idealna'), dict(i='31', o='gorąca')],
         sol='t = int(input())\nif t <= 0:\n    print("lód")\nelif t <= 15:\n    print("zimna")\nelif t <= 30:\n    print("idealna")\nelse:\n    print("gorąca")',
         hint='Użyj if, elif, elif, else – od najmniejszej temperatury.'),

@@ -9,7 +9,7 @@ and writes js/data/course.js.
 Usage:  python3 tools/build.py          # verify + build
         python3 tools/build.py --check  # verify only (exit 1 on problems)
 """
-import json, os, signal, sys, tempfile, copy, glob, importlib.util
+import json, os, random, signal, sys, tempfile, copy, glob, importlib.util
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'python'))
 sys.setrecursionlimit(3000)
@@ -61,6 +61,7 @@ if HAS_ALARM:
     signal.signal(signal.SIGALRM, _h)
 
 def run(code, stdin='', setup='', check=''):
+    random.seed(2026)  # deterministic output of examples that use random -> stable js/data/course.js
     d = tempfile.mkdtemp(); old = os.getcwd(); os.chdir(d)
     if HAS_ALARM: signal.alarm(3)
     try:

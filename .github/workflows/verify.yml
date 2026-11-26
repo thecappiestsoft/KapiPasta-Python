@@ -8,10 +8,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.13'  # the same version that generated js/data/course.js (error messages differ between versions)
       - name: Run every example, quiz and solution
         run: python3 tools/build.py --check
       - name: Check that js/data/course.js is up to date

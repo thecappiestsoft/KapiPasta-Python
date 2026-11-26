@@ -1,6 +1,6 @@
 # KapiPasta - Python 🐍
 
-Aplikacja do nauki Pythona z grywalizacją i kapibarą Kapi. Wygląda jak IDE (w stylu PyCharm), ma 9 rozdziałów, 29 lekcji i 225 zadań (PL + EN). Kod uczniów uruchamia się naprawdę, w przeglądarce, przez [Pyodide](https://pyodide.org).
+Aplikacja do nauki Pythona z grywalizacją i kapibarą Kapi. Wygląda jak IDE (w stylu PyCharm), ma 9 rozdziałów, 29 lekcji i 522 zadania (PL + EN), po 18 w każdej lekcji. Kod uczniów uruchamia się naprawdę, w przeglądarce, przez [Pyodide](https://pyodide.org).
 
 To statyczna strona: bez serwera, bez bazy i bez kroku budowania w przeglądarce. Wystarczy GitHub Pages.
 
@@ -27,7 +27,9 @@ content/
   pl/part1_….py             ← PEŁNA treść kursu po polsku (rozdziały 1–3)
   pl/part2_….py             ← rozdziały 4–6
   pl/part3_….py             ← rozdziały 7–9
+  pl/part4_dodatkowe.py     ← zadania dopisywane na końcu lekcji (słownik EXTRA)
   en/part*.py               ← tłumaczenie EN (nadpisuje pola wersji PL)
+  both/part5_poziom2i3.py   ← zadania DWUJĘZYCZNE poziomu 2 i 3: pola jako krotki ('polski', 'English')
 tools/
   build.py                  ← sprawdza CAŁĄ treść (uruchamia każdy przykład i rozwiązanie) i generuje js/data/course.js
   bundle.py                 ← skleja wszystko w jeden plik dist/kapipasta.html (opcjonalnie)
@@ -94,6 +96,10 @@ dict(id='for', title='for i range()',
 
 Każde zadanie ma `t` (typ), `l` (poziom 1–3: Odkrywca / Praktyk / Mistrz) i `q` (treść, HTML). Uczeń widzi zadania o poziomie ≤ wybranego etapu.
 
+**Reguła (pilnowana przez `build.py`):** każda lekcja ma dokładnie **18 zadań = 6 × poziom 1 + 6 × poziom 2 + 6 × poziom 3**. Dzięki temu Odkrywca ma 6 zadań w lekcji, Praktyk 12, a Mistrz 18.
+
+Zadania w `content/both/` piszesz raz, w dwóch językach naraz, np. `q=('Co wypisze program?', 'What will the program print?')`. Kod bez polskich słów może być zwykłym tekstem. Testy z `o='@'` mają oczekiwany wynik liczony automatycznie z rozwiązania wzorcowego.
+
 | typ | pola | opis |
 |---|---|---|
 | `quiz` | `code?`, `opts`, `a` (indeks poprawnej), `out=True` (opcje to wynik programu), `err=True` (opcje to typ błędu), `inp?`, `why` | kolejność opcji jest losowana w aplikacji |
@@ -124,6 +130,41 @@ Kolejny język: dodaj `content/<kod>/`, rozszerz `tools/build.py` (słownik `CHS
 - **XP** → `BASE` i `award()` w `js/app.js`. Progi poziomów → `LVT()`.
 - **Cel dnia** (50 XP) → `addXP()` w `js/app.js`.
 
+## Skala ocen 1–6
+
+Liczona w `gradeOf()` w `js/app.js` dla lekcji, rozdziału i całego kursu, zawsze z zadań etapu ucznia.
+
+**Ustawienia** (Panel nauczyciela → ⚙️ Ustawienia oceniania):
+
+| ustawienie | domyślnie | do wyboru |
+|---|---|---|
+| progi % dla ocen 2 / 3 / 4 / 5 | 30 / 50 / 75 / 90 | dowolne rosnące 1–100 |
+| ocena 6 | 100% zadań, wszystkie za 1. razem | 100% zadań i min. 90% za 1. razem |
+| zadanie rozwiązane po podejrzeniu rozwiązania | ½ pkt | 0 / ½ / 1 pkt |
+
+W tym samym miejscu nauczyciel może **odblokować wybrane działy** (🔓 Odblokowane działy). Uczniowie z kodem klasy mają je dostępne od razu, bez kończenia poprzedniego działu. Domyślnie kolejny dział odblokowuje się po zrobieniu 50% poprzedniego.
+
+Nauczyciel generuje z tych ustawień **kod klasy** (`KAPICFG.…`). Uczeń wkleja go w Ustawienia → Mój postęp → Kod klasy, żeby u siebie widzieć oceny według tej samej skali.
+
+Gwiazdki: ★★★ = 100% zadań wykonanych, ★★★ + kapibara w biretce = ocena 6, ★★½ = 5, ★★ = 4, ★½ = 3, ★ = 2, ½★ = rozpoczęte.
+
+**Progi domyślne w zadaniach (½ pkt za podgląd):**
+
+| ocena | próg | Odkrywca (6) | Praktyk (12) | Mistrz (18) |
+|---|---|---|---|---|
+| 6 | 100% + bezbłędnie | 6 bezbłędnie | 12 bezbłędnie | 18 bezbłędnie |
+| 5 | ≥ 90% | 5,5 | 11 | 16,5 |
+| 4 | ≥ 75% | 4,5 | 9 | 13,5 |
+| 3 | ≥ 50% | 3 | 6 | 9 |
+| 2 | ≥ 30% | 2 | 4 | 5,5 |
+| 1 | < 30% | mniej | mniej | mniej |
+
+## Czas i wychodzenie z aplikacji
+
+- Czas jest liczony osobno dla każdego zadania: od pokazania do poprawnej odpowiedzi, bez czasu spędzonego poza aplikacją. Jeden ciągły odcinek liczy się maksymalnie przez 15 min.
+- Wyjście z okna lub przełączenie karty (`blur` / `visibilitychange`) trwające ≥ 2 s jest liczone. Zapisywane są łączna liczba i czas, a także liczba i czas w każdej lekcji. Uczeń widzi komunikat, że nauczyciel to zobaczy.
+- Dane trafiają do pliku postępu (`time`, `away`, `awayL`). Panel nauczyciela pokazuje je w tabeli, w szczegółach ucznia i w eksporcie CSV.
+
 ## Uruchamianie Pythona
 
 `js/app.js` → obiekt `Py`: ładuje Pyodide z CDN w Web Workerze (z limitem czasu). Jeśli worker nie zadziała, ładuje go w głównym wątku. Kod ucznia wykonuje `python/runner.py`: podstawia `input()` danymi z pola „Dane wejściowe”, przechwytuje `print`, ogranicza liczbę wykonanych linii (ochrona przed nieskończonymi pętlami) i zwraca numer linii błędu. Ten sam runner wykorzystuje `tools/build.py`, więc testy lokalne i w przeglądarce działają identycznie.
@@ -137,4 +178,4 @@ Kolejny język: dodaj `content/<kod>/`, rozszerz `tools/build.py` (słownik `CHS
 
 ## Licencja
 
-© 2026 CappySoft.pl – wszelkie prawa zastrzeżone (zmień według potrzeb).
+MIT – zob. plik [LICENSE](LICENSE). © 2026 CappySoft.pl

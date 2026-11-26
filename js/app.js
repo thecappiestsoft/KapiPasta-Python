@@ -1,7 +1,7 @@
 /* ================= KapiPasta - Python ================= */
 const LS = 'pykapi-v1', LST = 'pykapi-teacher-v1';
-const DEF = { onboarded: false, name: '', cls: '', stage: 1, theme: 'rpg', mode: null, lang: 'pl', sound: true, unlockAll: false,
-  xp: 0, done: {}, stars: {}, badges: {}, streak: { last: '', n: 0 }, today: { d: '', xp: 0 }, combo: 0, bestCombo: 0, codeRuns: 0, sbRuns: 0, drafts: {}, created: 0, lastSeen: 0 };
+const DEF = { onboarded: false, name: '', cls: '', stage: 1, theme: 'rpg', mode: null, lang: 'pl', sound: true, unlockAll: false, gcfg: null,
+  xp: 0, done: {}, stars: {}, time: {}, away: { n: 0, sec: 0 }, awayL: {}, badges: {}, streak: { last: '', n: 0 }, today: { d: '', xp: 0 }, combo: 0, bestCombo: 0, codeRuns: 0, sbRuns: 0, drafts: {}, created: 0, lastSeen: 0 };
 function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
 let S = Object.assign({}, DEF, lsGet(LS) || {});
@@ -26,15 +26,57 @@ const chName = ch => ch.name[S.theme];
 /* ===== progress math ===== */
 function lessonProg(L) { const ts = stageTasks(L); const d = ts.filter(t => S.done[t.id] && S.done[t.id].ok).length; return { d, n: ts.length }; }
 function chapProg(ch) { let d = 0, n = 0; ch.lessons.forEach(L => { const p = lessonProg(L); d += p.d; n += p.n; }); return { d, n, p: n ? d / n : 0 }; }
-function unlocked(ci) { if (ci === 0 || S.unlockAll) return true; return chapProg(course()[ci - 1]).p >= 0.5; }
+function unlocked(ci) { if (ci === 0 || S.unlockAll) return true; if (S.gcfg && (S.gcfg.unlock || []).includes(course()[ci].id)) return true; return chapProg(course()[ci - 1]).p >= 0.5; }
 const LVT = k => 50 * k * (k + 1);
 function levelOf(xp) { let l = 0; while (xp >= LVT(l + 1)) l++; return { lv: l + 1, cur: xp - LVT(l), need: LVT(l + 1) - LVT(l) }; }
 const lvTitle = lv => W().lv[Math.min(lv - 1, 9)];
+/* ===== grading (scale 1–6) =====
+   Settings (teacher panel, shared with students by a class code):
+     th  = minimum % for grades 2, 3, 4, 5        (default 30 / 50 / 75 / 90)
+     six = 'flawless' → 6 for 100% with every task right on the first try (default)
+           'ff90'     → 6 for 100% with at least 90% of tasks right on the first try
+     rv  = points for a task solved after viewing the solution: 0, 0.5 (default) or 1
+     unlock = chapter ids the teacher unlocked for the class (no need to finish the previous chapter)
+   Stars: 3 = 100% done (+ graduate capybara = grade 6), 2.5 = grade 5, 2 = 4, 1.5 = 3, 1 = 2, 0.5 = started. */
+const EPS = 1e-9;
+const GDEF = { th: [30, 50, 75, 90], six: 'flawless', rv: 0.5, unlock: [] };
+const normCfg = c => { c = Object.assign({}, GDEF, c || {}); c.th = (c.th || GDEF.th).map(Number); c.unlock = Array.isArray(c.unlock) ? c.unlock : []; return c; };
+const curCfg = () => normCfg(typeof V !== 'undefined' && V.view === 'teacher' && typeof T !== 'undefined' ? T.gcfg : S.gcfg);
+function gradeOf(done, tasks, agg = false, cfg = curCfg()) {
+  const n = tasks.length; if (!n) return null;
+  let pts = 0, first = 0, ok = 0, started = false;
+  tasks.forEach(t => { const d = done[t.id]; if (!d) return; if (d.ok || d.tries) started = true; if (d.ok) { ok++; pts += d.rv ? cfg.rv : 1; if (d.first && !d.rv) first++; } });
+  const p = pts / n, fr = first / n, full = ok === n && p >= 1 - EPS;
+  const six = full && (cfg.six === 'ff90' ? fr >= .9 - EPS : fr >= 1 - EPS);
+  const th = cfg.th.map(x => x / 100);
+  const grade = six ? 6 : p >= th[3] - EPS ? 5 : p >= th[2] - EPS ? 4 : p >= th[1] - EPS ? 3 : p >= th[0] - EPS ? 2 : 1;
+  const stars = full ? 3 : ({ 5: 2.5, 4: 2, 3: 1.5, 2: 1 })[grade] || (p > 0 ? .5 : 0);
+  return { n, ok, pts, p, first, fr, stars, flawless: six, grade, started };
+}
+const tasksFor = (L, stage = S.stage) => L.tasks.filter(t => t.l <= stage);
+const chapTasks = (ch, stage = S.stage) => ch.lessons.flatMap(L => tasksFor(L, stage));
+const allTasks = (stage = S.stage) => course().flatMap(ch => chapTasks(ch, stage));
+function starsHtml(g, big) {
+  if (!g) return '';
+  let h = '';
+  for (let i = 1; i <= 3; i++) h += `<span class="star ${g.stars >= i ? 'full' : g.stars >= i - .5 ? 'half' : ''}">★</span>`;
+  return `<span class="stars ${big ? 'big' : ''}" title="${Math.round(g.p * 100)}%">${h}${g.flawless ? `<i class="cpy grad" title="${esc(tr('flawless'))}"></i>` : ''}</span>`;
+}
+const gradeChip = g => g && g.started ? `<span class="grade g${g.grade}" title="${esc(tr('gname' + g.grade))}">${g.grade}</span>` : '';
+const fmtTime = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; };
+const timeOf = (time, tasks) => tasks.reduce((a, t) => a + ((time || {})[t.id] || 0), 0);
+function gradeLegend(cfg = curCfg(), stage = S.stage) {
+  const n = [6, 12, 18][stage - 1], step = cfg.rv === 0.5 ? 2 : 1;
+  const need = pct => Math.ceil(n * pct / 100 * step - EPS) / step;
+  const rows = [[6, 3, true, tr(cfg.six === 'ff90' ? 'lg6b' : 'lg6')], [5, 2.5, false, tr('lgN', { p: cfg.th[3], k: need(cfg.th[3]), n })], [4, 2, false, tr('lgN', { p: cfg.th[2], k: need(cfg.th[2]), n })],
+    [3, 1.5, false, tr('lgN', { p: cfg.th[1], k: need(cfg.th[1]), n })], [2, 1, false, tr('lgN', { p: cfg.th[0], k: need(cfg.th[0]), n })], [1, .5, false, tr('lg1', { p: cfg.th[0], k: need(cfg.th[0]) })]];
+  return `<div class="legend"><b>${tr('scale')}</b> <span class="muted">(${tr('scaleN', { n })})</span><table class="tbl"><tbody>${rows.map(([g, s, f, txt]) => `<tr><td>${gradeChip({ grade: g, started: true })} ${tr('gname' + g)}</td><td>${starsHtml({ stars: g === 6 ? 3 : s, flawless: f, p: 1 })}</td><td class="muted">${txt}</td></tr>`).join('')}</tbody></table><small class="muted">${tr('lgNote', { rv: String(cfg.rv).replace('.', S.lang === 'pl' ? ',' : '.') })} ${tr('lgStars')}</small></div>`;
+}
 function statsOf(st) {
   const C = course(); let okCount = 0, first = 0, codeOk = 0, bugOk = 0;
   const types = {}; C.forEach(ch => ch.lessons.forEach(L => L.tasks.forEach(t => types[t.id] = t.t)));
   for (const id in st.done) { const d = st.done[id]; if (d.ok) { okCount++; if (d.first) first++; if (types[id] === 'code') codeOk++; if (types[id] === 'bug') bugOk++; } }
-  const perfect = Object.values(st.stars || {}).filter(x => x >= 3).length;
+  let perfect = 0; C.forEach(ch => ch.lessons.forEach(L => { const g = gradeOf(st.done, tasksFor(L, st.stage || S.stage)); if (g && g.flawless) perfect++; }));
   return { okCount, first, codeOk, bugOk, perfect, bestCombo: st.bestCombo || 0, streak: (st.streak && st.streak.n) || 0, xp: st.xp || 0, sbRuns: st.sbRuns || 0 };
 }
 
@@ -101,7 +143,7 @@ function award(t, extra = {}) {
   const first = (prev.tries || 0) === 0 && !prev.revealed;
   let xp = BASE[t.t] + (t.l - 1) * 5 + (first ? 5 : 0);
   if (prev.revealed || extra.self) xp = Math.round(xp / 2);
-  S.done[t.id] = { ok: 1, first: first ? 1 : 0, tries: (prev.tries || 0) + 1, ts: Date.now() };
+  S.done[t.id] = { ok: 1, first: first ? 1 : 0, tries: (prev.tries || 0) + 1, ts: Date.now(), rv: (prev.revealed || extra.self) ? 1 : 0 };
   if (first) { S.combo++; S.bestCombo = Math.max(S.bestCombo, S.combo); } else S.combo = 0;
   addXP(xp);
   if (first && S.combo > 0 && S.combo % 5 === 0) { addXP(10); setTimeout(() => toast('🔥 ' + tr('combo', { n: S.combo, xp: 10 })), 500); }
@@ -277,11 +319,11 @@ function treeHtml() {
   let h = `<div class="pane-title"><span>Project</span><span class="chip">${tr('st' + S.stage)}</span></div><ul class="tree"><li class="open"><div data-act="go" data-a="welcome"><span class="tw">▶</span>📂 <span class="nm"><b>KapiPasta</b> <span class="muted">~/python</span></span></div><ul>`;
   C.forEach((ch, ci) => {
     const p = chapProg(ch), ul = unlocked(ci), open = V.open[ch.id];
-    h += `<li class="${open ? 'open' : ''} ${ul ? '' : 'lock'}"><div data-act="${ul ? 'fold' : 'locked'}" data-a="${ch.id}"><span class="tw">▶</span>${ul ? ch.icon[S.theme] : '🔒'} <span class="nm">${String(ci + 1).padStart(2, '0')}_${esc(chName(ch))}</span><span class="pct">${Math.round(p.p * 100)}%</span></div>`;
+    h += `<li class="${open ? 'open' : ''} ${ul ? '' : 'lock'}"><div data-act="${ul ? 'fold' : 'locked'}" data-a="${ch.id}"><span class="tw">▶</span>${ul ? ch.icon[S.theme] : '🔒'} <span class="nm">${String(ci + 1).padStart(2, '0')}_${esc(chName(ch))}</span><span class="pct">${Math.round(p.p * 100)}%</span>${gradeChip(gradeOf(S.done, chapTasks(ch), true))}</div>`;
     if (open && ul) {
       h += '<ul>';
-      ch.lessons.forEach((L, li) => { const lp = lessonProg(L); const st = S.stars[L.id] || 0; const sel = V.view === 'lesson' && V.ci === ci && V.li === li;
-        h += `<li><div class="${sel ? 'sel' : ''}" data-act="lesson" data-a="${ci}:${li}"><span class="pyfile">🐍</span><span class="nm">${fname(ci, li, L)}</span>${lp.d === lp.n && lp.n ? `<span class="stars">${'⭐'.repeat(st || 1)}</span>` : `<span class="pct">${lp.d}/${lp.n}</span>`}</div></li>`; });
+      ch.lessons.forEach((L, li) => { const lp = lessonProg(L); const g = gradeOf(S.done, tasksFor(L)); const sel = V.view === 'lesson' && V.ci === ci && V.li === li;
+        h += `<li><div class="${sel ? 'sel' : ''}" data-act="lesson" data-a="${ci}:${li}"><span class="pyfile">🐍</span><span class="nm">${fname(ci, li, L)}</span>${g && g.started ? starsHtml(g) : `<span class="pct">${lp.d}/${lp.n}</span>`}</div></li>`; });
       h += '</ul>';
     }
     h += '</li>';
@@ -333,7 +375,7 @@ ${next ? `<div class="row-btns"><button class="btn pri" data-act="lesson" data-a
  <button class="qk" data-act="go" data-a="teacher"><span class="e">🧑‍🏫</span><span><b>${tr('teacher')}</b><small>${tr('teacherD')}</small></span></button>
 </div>
 <div><h2>📁 ${W().ch}</h2><div class="projlist">${C.map((ch, ci) => { const p = chapProg(ch), ul = unlocked(ci);
-  return `<button class="proj ${ul ? '' : 'lk'}" data-act="${ul ? 'opench' : 'locked'}" data-a="${ci}"><span class="pi" style="background:${cols[ci]}">${ul ? ch.icon[S.theme] : '🔒'}</span><span style="flex:1;min-width:0"><span class="pn">${W().ch} ${ci + 1}: ${esc(chName(ch))}</span><br><span class="pp">~/KapiPasta/${String(ci + 1).padStart(2, '0')}_${ch.id} · ${esc(ch.topic)}</span></span><span class="pb"><span class="pbar"><i style="width:${Math.round(p.p * 100)}%"></i></span><small class="muted">${p.d}/${p.n}</small></span></button>`; }).join('')}</div></div></div>`;
+  return `<button class="proj ${ul ? '' : 'lk'}" data-act="${ul ? 'opench' : 'locked'}" data-a="${ci}"><span class="pi" style="background:${cols[ci]}">${ul ? ch.icon[S.theme] : '🔒'}</span><span style="flex:1;min-width:0"><span class="pn">${W().ch} ${ci + 1}: ${esc(chName(ch))}</span><br><span class="pp">~/KapiPasta/${String(ci + 1).padStart(2, '0')}_${ch.id} · ${esc(ch.topic)}</span></span><span class="pb"><span class="pbar"><i style="width:${Math.round(p.p * 100)}%"></i></span><small class="muted">${p.d}/${p.n}</small></span>${(() => { const g = gradeOf(S.done, chapTasks(ch), true); return g && g.started ? `<span class="pg">${starsHtml(g)}${gradeChip(g)}</span>` : ''; })()}</button>`; }).join('')}</div></div></div>`;
 }
 
 /* ===== lesson ===== */
@@ -366,7 +408,7 @@ function seeded(id) { let h = 2166136261; for (const c of id) { h ^= c.charCodeA
 function taskView(t, ts) {
   const A = V.ans[t.id] || (V.ans[t.id] = {});
   const done = S.done[t.id] && S.done[t.id].ok;
-  let h = `<div class="task"><div class="qh">${typeChip(t)}<span class="chip">${tr('q', { i: V.ti + 1, n: ts.length })}</span><span class="chip">${'●'.repeat(t.l)}${'○'.repeat(3 - t.l)}</span>${done ? '<span class="chip" style="color:var(--ok)">✔</span>' : ''}</div><div class="qt">${t.q}</div>`;
+  let h = `<div class="task"><div class="qh">${typeChip(t)}<span class="chip">${tr('q', { i: V.ti + 1, n: ts.length })}</span><span class="chip">${'●'.repeat(t.l)}${'○'.repeat(3 - t.l)}</span>${done ? '<span class="chip" style="color:var(--ok)">✔</span>' : ''}<span class="chip" id="tt">⏱ ${fmtTime(S.time[t.id] || 0)}</span></div><div class="qt">${t.q}</div>`;
   if (t.t === 'quiz') {
     if (t.code) h += codeBlock(t.code, { title: 'quiz.py' });
     if (t.inp) h += `<div class="muted" style="font-size:12px">⌨️ input: <code>${esc(t.inp.replace(/\n/g, ' ⏎ '))}</code></div>`;
@@ -412,18 +454,20 @@ function feedback(t, A) {
 }
 function keysBar() { return `<div class="keys">${['⇥', ':', '(', ')', '"', '[', ']', '{', '}', '=', '+', '*', '#', '_', '<', '>'].map(k => `<button data-key="${esc(k)}">${esc(k)}</button>`).join('')}</div>`; }
 function doneView(L) {
-  const ts = stageTasks(L); const first = ts.filter(t => S.done[t.id] && S.done[t.id].first).length;
-  const r = ts.length ? first / ts.length : 1; const stars = r === 1 ? 3 : r >= .6 ? 2 : 1;
+  const ts = stageTasks(L); const g = gradeOf(S.done, ts); const first = ts.filter(t => S.done[t.id] && S.done[t.id].first && !S.done[t.id].rv).length;
+  const aw = S.awayL[L.id];
   const C = course(); let nxt = null;
   if (V.li + 1 < C[V.ci].lessons.length) nxt = [V.ci, V.li + 1]; else if (V.ci + 1 < C.length && unlocked(V.ci + 1)) nxt = [V.ci + 1, 0];
-  return `<div class="task" style="text-align:center">${capy({ size: 170, mood: 'wow' })}<h1>${tr('done')}</h1><div style="font-size:42px;letter-spacing:4px">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-<p class="muted">${tr('accuracy')}: ${first}/${ts.length}</p><div class="row-btns" style="justify-content:center">${nxt ? `<button class="btn pri" data-act="lesson" data-a="${nxt[0]}:${nxt[1]}">${tr('nextLesson')}</button>` : ''}<button class="btn" data-act="go" data-a="welcome">${tr('backMap')}</button><button class="btn ghost" data-act="gotask" data-a="0">${tr('again')}</button></div></div>`;
+  return `<div class="task" style="text-align:center">${capy({ size: 170, mood: 'wow' })}<h1>${tr('done')}</h1><div>${starsHtml(g, true)}</div>
+<div style="margin:8px 0">${tr('grade')}: ${gradeChip(g)} <b>${tr('gname' + g.grade)}</b>${g.flawless ? ` · <i class="cpy grad"></i> ${tr('flawless')}` : ''}</div>
+<p class="muted">✅ ${g.ok}/${ts.length} · 🎯 ${tr('accuracy')}: ${first}/${ts.length} · ⏱ ${fmtTime(timeOf(S.time, ts))}${aw && aw.n ? ` · 👀 ${tr('awayCnt')}: ${aw.n} (${fmtTime(aw.sec)})` : ''}</p>
+<div class="row-btns" style="justify-content:center">${nxt ? `<button class="btn pri" data-act="lesson" data-a="${nxt[0]}:${nxt[1]}">${tr('nextLesson')}</button>` : ''}<button class="btn" data-act="go" data-a="welcome">${tr('backMap')}</button><button class="btn ghost" data-act="gotask" data-a="0">${tr('again')}</button></div>
+<details style="text-align:left;margin-top:10px"><summary>${tr('scale')}</summary>${gradeLegend()}</details></div>`;
 }
 function finishLesson() {
   const L = course()[V.ci].lessons[V.li], ts = stageTasks(L);
   if (ts.every(t => S.done[t.id] && S.done[t.id].ok)) {
-    const first = ts.filter(t => S.done[t.id].first).length; const r = ts.length ? first / ts.length : 1; const stars = r === 1 ? 3 : r >= .6 ? 2 : 1;
-    S.stars[L.id] = Math.max(S.stars[L.id] || 0, stars); checkBadges(); save(); V.phase = 'done'; confetti(); beep('lvl'); kapiSay(pick(tr('correct')), 'wow');
+    const g = gradeOf(S.done, ts); S.stars[L.id] = Math.max(S.stars[L.id] || 0, g.stars); checkBadges(); save(); V.phase = 'done'; confetti(); beep('lvl'); kapiSay(pick(tr('correct')), 'wow');
   } else { V.ti = firstUndone(L); }
   renderMain(); scrollTop();
 }
@@ -448,6 +492,11 @@ function profileView() {
 <h2>📊 ${tr('stats')}</h2><div class="statgrid"><div class="stat"><div class="l">💎 XP</div><div class="v">${S.xp}</div></div><div class="stat"><div class="l">✅ ${tr('tasksDone')}</div><div class="v">${st.okCount}/${total}</div></div>
 <div class="stat"><div class="l">🎯 ${tr('accuracy')}</div><div class="v">${st.okCount ? Math.round(st.first / st.okCount * 100) : 0}%</div></div><div class="stat"><div class="l">🔥 ${tr('bestCombo')}</div><div class="v">${S.bestCombo}</div></div>
 <div class="stat"><div class="l">📅 ${tr('streak')}</div><div class="v">${S.streak.n}</div></div><div class="stat"><div class="l">▶ ${tr('codeRuns')}</div><div class="v">${S.codeRuns}</div></div></div>
+<h2>📝 ${tr('grades')}</h2>${(() => { const C = course(); const all = gradeOf(S.done, allTasks(), true);
+  return `<div class="tscroll"><table class="tbl"><thead><tr><th>${W().ch}</th><th>${tr('tProg')}</th><th>⭐</th><th>${tr('grade')}</th><th>⏱</th></tr></thead><tbody>${C.map((ch, ci) => { const ts = chapTasks(ch); const g = gradeOf(S.done, ts, true);
+    return `<tr><td>${ch.icon[S.theme]} ${ci + 1}. ${esc(chName(ch))}</td><td>${g.ok}/${g.n}</td><td>${g.started ? starsHtml(g) : '–'}</td><td>${gradeChip(g) || '–'}</td><td>${fmtTime(timeOf(S.time, ts))}</td></tr>`; }).join('')}
+  <tr><td><b>${tr('total')}</b></td><td><b>${all.ok}/${all.n}</b></td><td>${all.started ? starsHtml(all) : '–'}</td><td>${gradeChip(all) || '–'}</td><td><b>${fmtTime(timeOf(S.time, allTasks()))}</b></td></tr></tbody></table></div>
+  <p class="muted">👀 ${tr('awayCnt')}: ${S.away.n} (${fmtTime(S.away.sec)})</p>${gradeLegend()}`; })()}
 <h2>🏅 ${tr('badges')}</h2><div class="badges">${list.map(b => `<div class="badge ${b.ok ? '' : 'off'}"><div class="bi">${b.ico}</div><b>${esc(b.n)}</b><small>${esc(b.d)}</small></div>`).join('')}</div>
 <div class="row-btns" style="margin-top:18px"><button class="btn pri" data-act="progress">💾 ${tr('progress')}</button></div></div>`;
 }
@@ -464,7 +513,8 @@ function settingsModal() {
     learn: `<label class="lbl">${tr('yourName')}</label><input class="inp" data-set="name" value="${esc(S.name)}" maxlength="30"><label class="lbl">${tr('yourClass')}</label><input class="inp" data-set="cls" value="${esc(S.cls)}" maxlength="12">
       <h3 style="margin-top:14px">${tr('chooseStage')}</h3><div class="choices">${[1, 2, 3].map(i => `<button class="choice ${S.stage === i ? 'on' : ''}" data-act="setstage" data-a="${i}"><span class="ce">${['🌱', '🚀', '🏆'][i - 1]}</span><b>${tr('st' + i)}</b><small>${tr('st' + i + 'd')}</small></button>`).join('')}</div>
       <div class="switch"><span>${tr('unlockAll')}</span><input type="checkbox" data-set="unlockAll" ${S.unlockAll ? 'checked' : ''}></div>`,
-    prog: `<div class="row-btns"><button class="btn pri" data-act="progress">💾 ${tr('progress')}</button></div><div class="row-btns"><button class="btn" style="color:var(--bad)" data-act="resetall">🗑️ ${tr('resetProg')}</button></div>`
+    prog: `<h3>🏫 ${tr('clsCode')}</h3><p class="muted">${tr('clsCodeD')}</p><div class="row-btns"><input class="inp" id="clscode" placeholder="KAPICFG…" style="flex:1"><button class="btn pri" data-act="clsapply">${tr('load')}</button>${S.gcfg ? `<button class="btn ghost" data-act="clsreset">${tr('clsReset')}</button>` : ''}</div>${gradeLegend()}
+      <div class="row-btns"><button class="btn pri" data-act="progress">💾 ${tr('progress')}</button></div><div class="row-btns"><button class="btn" style="color:var(--bad)" data-act="resetall">🗑️ ${tr('resetProg')}</button></div>`
   };
   modal(`<div class="mh">⚙️ ${tr('settings')}<button class="btn sm ghost" data-act="close">✕</button></div><div class="settings"><nav>${[['look', '🎨 ' + tr('look')], ['learn', '🎓 ' + tr('chooseStage')], ['prog', '💾 ' + tr('progress')]].map(([k, n]) => `<button class="${SETTAB === k ? 'on' : ''}" data-act="settab" data-a="${k}">${n}</button>`).join('')}</nav><section>${sec[SETTAB]}</section></div><div class="mf"><button class="btn pri" data-act="close">${tr('close')}</button></div>`, 'wide');
 }
@@ -526,6 +576,8 @@ document.addEventListener('click', async e => {
     case 'dl': downloadProgress(); break;
     case 'pickfile': document.getElementById(a).click(); break;
     case 'impcode': importStudentText(document.getElementById('impta').value); break;
+    case 'clsapply': { try { const o = await decodeCfg(document.getElementById('clscode').value); S.gcfg = normCfg(o.cfg); save(); toast('✔ ' + tr('clsOk')); if (S.gcfg.unlock.length) setTimeout(() => toast('🔓 ' + tr('clsUnl', { n: S.gcfg.unlock.length })), 600); settingsModal(); render(); } catch (e) { toast('⚠️ ' + tr('badCode')); } break; }
+    case 'clsreset': S.gcfg = null; save(); settingsModal(); render(); break;
     default: if (typeof teacherAct === 'function') teacherAct(act, a, el);
   }
 });
@@ -564,10 +616,46 @@ let saveT; const saveSoon = () => { clearTimeout(saveT); saveT = setTimeout(save
 function insertAt(ed, s) { const a = ed.selectionStart, b = ed.selectionEnd; ed.setRangeText(s, a, b, 'end'); ed.dispatchEvent(new Event('input', { bubbles: true })); ed.focus(); }
 function curTask() { if (V.view !== 'lesson') return null; return stageTasks(course()[V.ci].lessons[V.li])[V.ti]; }
 function scrollToTask() { const t = document.querySelector('.task'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-function afterRender() {}
+/* ===== time per task + leaving the app (window blur / tab switch) ===== */
+const TT = { id: null, start: 0 };
+function ttFlush() { if (TT.id && TT.start) { const sec = Math.min((Date.now() - TT.start) / 1000, 900); S.time[TT.id] = (S.time[TT.id] || 0) + sec; TT.start = Date.now(); saveSoon(); } }
+function ttStop() { ttFlush(); TT.id = null; TT.start = 0; }
+function ttSync() {
+  const t = curTask();
+  const active = V.view === 'lesson' && V.phase === 'tasks' && t && !(S.done[t.id] && S.done[t.id].ok);
+  if (!active) { if (TT.id) ttStop(); return; }
+  if (TT.id !== t.id) { ttStop(); TT.id = t.id; TT.start = AWAY.on ? 0 : Date.now(); }
+}
+setInterval(() => {
+  const e = document.getElementById('tt'); if (!e || !TT.id || !TT.start) return;
+  e.textContent = '⏱ ' + fmtTime((S.time[TT.id] || 0) + (Date.now() - TT.start) / 1000);
+}, 1000);
+const AWAY = { on: false, since: 0, ctx: null };
+function goAway() {
+  if (AWAY.on || !S.onboarded || V.view === 'teacher') return;
+  AWAY.on = true; AWAY.since = Date.now();
+  AWAY.ctx = V.view === 'lesson' ? course()[V.ci].lessons[V.li].id : null;
+  if (TT.id && TT.start) { ttFlush(); TT.start = 0; }
+}
+function comeBack() {
+  if (!AWAY.on || document.hidden) return;
+  AWAY.on = false; const sec = (Date.now() - AWAY.since) / 1000;
+  if (TT.id) TT.start = Date.now();
+  if (sec < 2) return;
+  S.away.n++; S.away.sec += sec;
+  if (AWAY.ctx) { const a = S.awayL[AWAY.ctx] || (S.awayL[AWAY.ctx] = { n: 0, sec: 0 }); a.n++; a.sec = Math.round(a.sec + sec); }
+  save();
+  if (AWAY.ctx && V.view === 'lesson' && V.phase === 'tasks') kapiSay(tr('awayMsg', { t: fmtTime(sec) }), 'think');
+}
+document.addEventListener('visibilitychange', () => document.hidden ? goAway() : comeBack());
+window.addEventListener('blur', goAway);
+window.addEventListener('focus', comeBack);
+document.addEventListener('pointerdown', () => { if (AWAY.on && !document.hidden) comeBack(); }, true);
+window.addEventListener('pagehide', () => { ttFlush(); save(); });
+function afterRender() { ttSync(); }
 
 /* ===== answer handlers ===== */
-function good(t, A) { A.xp = award(t); A.right = true; A.praise = pick(tr('correct')); kapiSay(`<b>${A.praise}</b>${A.xp ? ` +${A.xp} XP` : ''}`, 'happy'); if (A.xp) confetti(25); }
+function good(t, A) { if (TT.id === t.id) ttStop(); A.xp = award(t); A.right = true; A.praise = pick(tr('correct')); kapiSay(`<b>${A.praise}</b>${A.xp ? ` +${A.xp} XP` : ''}`, 'happy'); if (A.xp) confetti(25); }
 function bad(t, A, msg) { fail(t); A.badMsg = msg || pick(tr('wrong')); kapiSay(A.badMsg + (t.why && (S.done[t.id].tries >= 2) ? '<br><small>' + t.why + '</small>' : ''), 'sad'); }
 function quizAnswer(oi) {
   const t = curTask(), A = V.ans[t.id];
@@ -625,8 +713,9 @@ const b64e = b => { let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += 
 const b64d = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const r = atob(s); const b = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) b[i] = r.charCodeAt(i); return b; };
 async function zip(b, mode) { const st = mode === 'c' ? new CompressionStream('deflate-raw') : new DecompressionStream('deflate-raw'); return new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(st)).arrayBuffer()); }
 function payload() {
-  const done = {}; for (const id in S.done) { const d = S.done[id]; done[id] = [d.ok ? 1 : 0, d.first ? 1 : 0, d.tries || 0]; }
-  return { app: 'pykapi', v: 1, name: S.name, cls: S.cls, stage: S.stage, xp: S.xp, done, stars: S.stars, badges: Object.keys(S.badges), streak: S.streak.n, bestCombo: S.bestCombo, codeRuns: S.codeRuns, created: S.created, ts: Date.now(), lang: S.lang };
+  const done = {}; for (const id in S.done) { const d = S.done[id]; done[id] = [d.ok ? 1 : 0, d.first ? 1 : 0, d.tries || 0, d.rv ? 1 : 0]; }
+  const time = {}; for (const id in S.time) time[id] = Math.round(S.time[id]);
+  return { app: 'pykapi', v: 1, name: S.name, cls: S.cls, stage: S.stage, xp: S.xp, done, stars: S.stars, badges: Object.keys(S.badges), time, away: { n: S.away.n, sec: Math.round(S.away.sec) }, awayL: S.awayL, streak: S.streak.n, bestCombo: S.bestCombo, codeRuns: S.codeRuns, created: S.created, ts: Date.now(), lang: S.lang };
 }
 async function encodeProgress(obj) {
   const json = JSON.stringify(obj); const sum = fnv(SALT + json); let bytes = new TextEncoder().encode(json); let fl = 'p';
@@ -639,6 +728,8 @@ async function decodeProgress(text) {
   const json = new TextDecoder().decode(bytes); if (fnv(SALT + json) !== m[2]) throw new Error('sum');
   const o = JSON.parse(json); if (o.app !== 'pykapi') throw new Error('app'); return o;
 }
+async function encodeCfg(cfg) { return 'KAPICFG.' + (await encodeProgress({ app: 'pykapi', kind: 'cfg', cfg: normCfg(cfg) })).slice(8); }
+async function decodeCfg(text) { const o = await decodeProgress(String(text).replace(/KAPICFG\./, 'PYKAPI1.')); if (o.kind !== 'cfg') throw new Error('kind'); return o; }
 let DL = null;
 const IN_CLAUDE = !!(window.claude && window.claude.use);
 const canSave = () => !!DL || !IN_CLAUDE;
@@ -673,10 +764,10 @@ function copyText(s) {
 }
 function fallbackCopy(s) { const ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('📋 ' + tr('copied')); } catch (e) { } ta.remove(); }
 async function importStudentText(text) {
-  let o; try { o = await decodeProgress(text); } catch (e) { toast('⚠️ ' + tr('badCode')); return; }
+  let o; try { o = await decodeProgress(text); if (o.kind === 'cfg') throw 0; } catch (e) { toast('⚠️ ' + tr('badCode')); return; }
   confirmBox(tr('impQ', { name: esc(o.name), xp: o.xp }), () => {
-    const done = {}; for (const id in o.done) { const d = o.done[id]; done[id] = { ok: d[0], first: d[1], tries: d[2] }; }
-    Object.assign(S, { name: o.name, cls: o.cls || '', stage: o.stage, xp: o.xp, done, stars: o.stars || {}, bestCombo: o.bestCombo || 0, codeRuns: o.codeRuns || 0, onboarded: true });
+    const done = {}; for (const id in o.done) { const d = o.done[id]; done[id] = { ok: d[0], first: d[1], tries: d[2], rv: d[3] || 0 }; }
+    Object.assign(S, { name: o.name, cls: o.cls || '', stage: o.stage, xp: o.xp, done, stars: o.stars || {}, bestCombo: o.bestCombo || 0, codeRuns: o.codeRuns || 0, time: o.time || {}, away: o.away || { n: 0, sec: 0 }, awayL: o.awayL || {}, onboarded: true });
     S.badges = {}; (o.badges || []).forEach(b => S.badges[b] = Date.now()); S.streak = { last: todayStr(), n: o.streak || 1 };
     save(); render(); confetti(); toast('✔ ' + tr('impOk'));
   });

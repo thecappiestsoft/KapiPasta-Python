@@ -36,7 +36,7 @@ print("Suma:", suma)''', lvl=2,
    dict(t='quiz', l=2, q='Co wypisze program?', code='''for i in range(10, 0, -3):
     print(i, end=" ")''', opts=['10 7 4 1 ', '10 7 4 ', '10 7 4 1 -2 ', '9 6 3 '], a=0, out=True,
         why='Startujemy od 10 i odejmujemy 3, dopóki jesteśmy powyżej 0.'),
-   dict(t='bug', l=2, q='Program miał wypisać liczby od 1 do 5, ale wypisuje 1–4. Kliknij winną linię.', code='''for i in range(1, 5):
+   dict(t='bug', l=1, q='Program miał wypisać liczby od 1 do 5, ale wypisuje 1–4. Kliknij winną linię.', code='''for i in range(1, 5):
     print(i)''', line=0, noerr=True, fix='for i in range(1, 6):', why='Koniec zakresu w range nie jest wliczany – trzeba podać 6.'),
    dict(t='code', l=1, q='Wypisz 3 razy w osobnych liniach: <code>Kapi pływa</code>',
         start='', tests=[dict(i='', o='Kapi pływa\nKapi pływa\nKapi pływa')], check="assert __src.count('print') == 1, 'Użyj pętli i jednego print'",
@@ -176,7 +176,7 @@ print(s[0])
 print(s[4])''', line=2, fix='print(s[3])', why='Słowo ma 4 znaki o indeksach 0–3. s[4] wychodzi poza tekst: IndexError.'),
    dict(t='fill', l=2, q='Uzupełnij, aby wypisać tekst od tyłu', code='''s = "kajak2"
 print(s[___])''', ans=[['::-1']], expect='2kajak', why='Krok -1 czyta tekst od końca.'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''s = "abcdefgh"
+   dict(t='quiz', l=3, q='Co wypisze program?', code='''s = "abcdefgh"
 print(s[1::3])''', opts=['beh', 'adg', 'bdf', 'bcd'], a=0, out=True, why='Start od indeksu 1 (b), potem co 3: e, h.'),
    dict(t='code', l=1, q='Wczytaj słowo i wypisz jego pierwszą i ostatnią literę oddzielone spacją.',
         start='s = input()\n', tests=[dict(i='kapibara', o='k a'), dict(i='python', o='p n')], sol='s = input()\nprint(s[0], s[-1])', hint='s[0] i s[-1]'),
@@ -383,7 +383,7 @@ print(punkt)''', line=1, fix='punkt = (5, 3)', why='Krotek nie można zmieniać:
 b = {2, 3, 4}
 print(sorted(a & b), sorted(a - b))''', opts=['[2, 3] [1]', '[1, 2, 3, 4] [1]', '[2, 3] [4]', '[1] [2, 3]'], a=0, out=True,
         why='& to część wspólna, a - b to elementy z a, których nie ma w b.'),
-   dict(t='fill', l=2, q='Uzupełnij, aby rozpakować krotkę', code='''p = (4, 9)
+   dict(t='fill', l=1, q='Uzupełnij, aby rozpakować krotkę', code='''p = (4, 9)
 ___, y = p
 print(x + y)''', ans=[['x']], expect='13', why='Rozpakowanie: x, y = p.'),
    dict(t='code', l=2, q='Wczytaj słowa w jednej linii i wypisz, ile jest różnych słów.',
@@ -421,7 +421,7 @@ print(wiek["Lulu"])''', line=2, fix='print(wiek.get("Lulu", "brak"))', why='Kluc
    dict(t='fill', l=2, q='Uzupełnij, aby pętla dostawała klucz i wartość', code='''d = {"x": 1, "y": 2}
 for k, v in d.___():
     print(k, v)''', ans=[['items']], expect='x 1\ny 2', why='items() zwraca pary (klucz, wartość).'),
-   dict(t='quiz', l=2, q='Co wypisze program?', code='''d = {"a": 3, "b": 5}
+   dict(t='quiz', l=3, q='Co wypisze program?', code='''d = {"a": 3, "b": 5}
 d["a"] = d["a"] + d["b"]
 print(sum(d.values()))''', opts=['13', '8', '10', '16'], a=0, out=True, why='d["a"] staje się 8, więc suma wartości to 8 + 5 = 13.'),
    dict(t='code', l=1, q='Mając słownik cen, wczytaj nazwę owocu i wypisz jego cenę albo <code>brak</code>, gdy go nie ma.',
